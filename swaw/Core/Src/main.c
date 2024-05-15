@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stm32f1xx.h"
+#include "proto.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -37,6 +38,16 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+#define USB_FORCE_REENUMERATION() { \
+	/* Pull D+ to ground for a moment to force reenumeration */ \
+	RCC->APB2ENR |= RCC_APB2ENR_IOPAEN; \
+	GPIOA->CRH |= GPIO_CRH_MODE12_1; \
+	GPIOA->CRH &= ~GPIO_CRH_CNF12; \
+	GPIOA->BSRR = GPIO_BSRR_BR12; \
+	HAL_Delay(100); \
+	GPIOA->CRH &= ~GPIO_CRH_MODE12; \
+	GPIOA->CRH |= GPIO_CRH_CNF12_0; \
+} \
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -100,7 +111,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  USB_FORCE_REENUMERATION(); //only on BluePill!!!!
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -110,15 +121,28 @@ int main(void)
   MX_I2C2_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(200);
+  HAL_Delay(2000); //USB initialization apparently requires much time
+  //enable USB pullup for USB enumeration
   HAL_GPIO_WritePin(USB_PU_GPIO_Port, USB_PU_Pin, GPIO_PIN_SET);
 
+  /*
+   * EXAMPLES!
+   */
+
+
   //BMP280 ID register read
-  HAL_I2C_Mem_Read_IT(&hi2c2, 0b1110110 << 1, 0xD0, I2C_MEMADD_SIZE_8BIT, &data, 1);
+  //HAL_I2C_Mem_Read_IT(&hi2c2, 0b1110110 << 1, 0xD0, I2C_MEMADD_SIZE_8BIT, &data, 1);
 
   //W5100 RX memory size register read
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
-  HAL_SPI_TransmitReceive_DMA(&hspi1, txData, rxData, 4);
+  //HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
+  //HAL_SPI_TransmitReceive_DMA(&hspi1, txData, rxData, 4);
+  //HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
+
+
+  int handle = ProtoRegister("TEST", NULL);
+  char a[] = "Halo halo test\r\n";
+  ProtoSend(handle, a, sizeof(a));
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
