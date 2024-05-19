@@ -1,0 +1,12 @@
+
+#ifndef INC_I2C_H_
+#define INC_I2C_H_
+
+// I2C READ STATE
+enum I2CX_STATE{
+	I2C_ILDE,
+	I2C_SCD40_DATA_READY_READ,	// Read DATA_READY_STATUS from SCD40
+	I2C_SCD40_DATA_READ			// Read DATA from SCD40
+};
+
+#endif /* INC_I2C_H_ */
