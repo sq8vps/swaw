@@ -24,6 +24,8 @@
 /* USER CODE BEGIN Includes */
 #include "stm32f1xx.h"
 #include "proto.h"
+#include "scd40.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,7 +60,7 @@ DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
 
 /* USER CODE BEGIN PV */
-static unsigned char data = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,7 +79,10 @@ static void MX_SPI1_Init(void);
 //callback for I2C memory read mode
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-	asm("nop");
+	if(hi2c->Instance == I2C2)
+	{
+		Scd40HandleInterrupt();
+	}
 }
 
 /* USER CODE END 0 */
@@ -88,6 +93,7 @@ void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -119,13 +125,7 @@ int main(void)
   //enable USB pullup for USB enumeration
   HAL_GPIO_WritePin(USB_PU_GPIO_Port, USB_PU_Pin, GPIO_PIN_SET);
 
-  /*
-   * EXAMPLES!
-   */
-
-
-  //BMP280 ID register read
-  //HAL_I2C_Mem_Read_IT(&hi2c2, 0b1110110 << 1, 0xD0, I2C_MEMADD_SIZE_8BIT, &data, 1);
+  Scd40Init();
 
   //dummy EEG-like data for testing
   int handle = ProtoRegister("EEG ", NULL);
@@ -138,6 +138,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  Scd40Process();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
