@@ -24,6 +24,8 @@
 /* USER CODE BEGIN Includes */
 #include "stm32f1xx.h"
 #include "proto.h"
+#include "scd40.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,8 +60,7 @@ DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
 
 /* USER CODE BEGIN PV */
-static unsigned char data = 0;
-static unsigned char txData[4] = {0x0F, 0x00, 0x1A, 0x00}, rxData[4];
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -78,14 +79,12 @@ static void MX_SPI1_Init(void);
 //callback for I2C memory read mode
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-	asm("nop");
+	if(hi2c->Instance == I2C2)
+	{
+		Scd40HandleInterrupt();
+	}
 }
 
-void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
-{
-	HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
-	asm("nop");
-}
 /* USER CODE END 0 */
 
 /**
@@ -94,6 +93,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -125,22 +125,11 @@ int main(void)
   //enable USB pullup for USB enumeration
   HAL_GPIO_WritePin(USB_PU_GPIO_Port, USB_PU_Pin, GPIO_PIN_SET);
 
-  /*
-   * EXAMPLES!
-   */
+  Scd40Init();
 
-
-  //BMP280 ID register read
-  //HAL_I2C_Mem_Read_IT(&hi2c2, 0b1110110 << 1, 0xD0, I2C_MEMADD_SIZE_8BIT, &data, 1);
-
-  //W5100 RX memory size register read
-  //HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
-  //HAL_SPI_TransmitReceive_DMA(&hspi1, txData, rxData, 4);
-  //HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
-
-
-  int handle = ProtoRegister("TEST", NULL);
-  char a[] = "Halo halo test\r\n";
+  //dummy EEG-like data for testing
+  int handle = ProtoRegister("EEG ", NULL);
+  unsigned char a[15] = {0b11001010, 0b01010000, 0, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0x7F, 0xFF, 0xFF};
   ProtoSend(handle, a, sizeof(a));
 
   /* USER CODE END 2 */
@@ -149,6 +138,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  Scd40Process();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -259,7 +249,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -350,6 +340,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(ADS_READY_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */

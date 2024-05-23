@@ -69,6 +69,7 @@ void Error_Handler(void);
 #define ADS_START_GPIO_Port GPIOB
 #define ADS_READY_Pin GPIO_PIN_8
 #define ADS_READY_GPIO_Port GPIOB
+#define ADS_READY_EXTI_IRQn EXTI9_5_IRQn
 #define ADS_RESET_Pin GPIO_PIN_9
 #define ADS_RESET_GPIO_Port GPIOB
 
