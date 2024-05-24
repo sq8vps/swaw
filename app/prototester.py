@@ -58,9 +58,9 @@ def ParseSpo2(payload, size):
 def ParseCo2(payload, size):
     if size < CO2_DATA_SIZE:
         return
-    scd_data = [0] * (CO2_DATA_SIZE/2)
+    scd_data = [0] * (CO2_DATA_SIZE//2)
     i = 0
-    while i < (CO2_DATA_SIZE/2):
+    while i < (CO2_DATA_SIZE//2):
         scd_data[i] = int.from_bytes(payload[2 * i:2 * i + 2], 'big', signed=False)
         i += 1
     print('CO2 level: ' + str(scd_data[0]))
