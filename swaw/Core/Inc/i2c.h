@@ -2,11 +2,27 @@
 #ifndef INC_I2C_H_
 #define INC_I2C_H_
 
-// I2C READ STATE
-enum I2CX_STATE{
-	I2C_ILDE,
-	I2C_SCD40_DATA_READY_READ,	// Read DATA_READY_STATUS from SCD40
-	I2C_SCD40_DATA_READ			// Read DATA from SCD40
-};
+#include <stdbool.h>
+
+/**
+ * @file i2c.h
+ * @brief A very simple thread unsafe I2C arbitrator
+ */
+
+/**
+ * @brief Check if I2C is free to use
+ * @return True if free, false if not
+ */
+bool I2cCheckFree(void);
+
+/**
+ * @brief Lock I2C
+ */
+void I2cLock(void);
+
+/**
+ * @brief Unlock I2C
+ */
+void I2cUnlock(void);
 
 #endif /* INC_I2C_H_ */

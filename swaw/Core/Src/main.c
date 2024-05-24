@@ -23,8 +23,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stm32f1xx.h"
+#include "proto.h"
 #include "scd40.h"
-#include "i2c.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,11 +35,21 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define SCD40_DATA_BUFFER_SIZE 10
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+#define USB_FORCE_REENUMERATION() { \
+	/* Pull D+ to ground for a moment to force reenumeration */ \
+	RCC->APB2ENR |= RCC_APB2ENR_IOPAEN; \
+	GPIOA->CRH |= GPIO_CRH_MODE12_1; \
+	GPIOA->CRH &= ~GPIO_CRH_CNF12; \
+	GPIOA->BSRR = GPIO_BSRR_BR12; \
+	HAL_Delay(100); \
+	GPIOA->CRH &= ~GPIO_CRH_MODE12; \
+	GPIOA->CRH |= GPIO_CRH_CNF12_0; \
+} \
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -49,13 +60,7 @@ DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
 
 /* USER CODE BEGIN PV */
-static unsigned char data = 0;
-static unsigned char txData[4] = {0x0F, 0x00, 0x1A, 0x00}, rxData[4];
 
-enum I2CX_STATE i2c2_state = I2C_ILDE;
-SCD40 scd40_data;
-static uint8_t scd40_data_buffer [SCD40_DATA_BUFFER_SIZE];
-static uint8_t start_periodic_measurement_flag;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,37 +79,12 @@ static void MX_SPI1_Init(void);
 //callback for I2C memory read mode
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-	if(hi2c->Instance == I2C2){
-		switch(i2c2_state){
-			case I2C_ILDE:
-
-				break;
-			case I2C_SCD40_DATA_READY_READ:
-				if(((scd40_data_buffer[0] & 0x07) == 0) && scd40_data_buffer[1] == 0){
-					i2c2_state = I2C_ILDE;	// Data is not ready (If LSB 11 bits are 0 -> data is not ready)
-					break;
-				}
-				if(0 == read_data(&hi2c2, &scd40_data_buffer[0])){
-					i2c2_state = I2C_SCD40_DATA_READ;
-					break;
-				}
-				i2c2_state = I2C_ILDE;
-				break;
-			case I2C_SCD40_DATA_READ:
-				check_read_data(&scd40_data, &scd40_data_buffer[0]);
-				i2c2_state = I2C_ILDE;
-				break;
-			}
-		}
-
-	asm("nop");
+	if(hi2c->Instance == I2C2)
+	{
+		Scd40HandleInterrupt();
+	}
 }
 
-void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
-{
-	HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET);
-	asm("nop");
-}
 /* USER CODE END 0 */
 
 /**
@@ -131,7 +111,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  USB_FORCE_REENUMERATION(); //only on BluePill!!!!
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -141,32 +121,16 @@ int main(void)
   MX_I2C2_Init();
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_Delay(200);
+  HAL_Delay(2000); //USB initialization apparently requires much time
+  //enable USB pullup for USB enumeration
   HAL_GPIO_WritePin(USB_PU_GPIO_Port, USB_PU_Pin, GPIO_PIN_SET);
 
-  //BMP280 ID register read
-  HAL_I2C_Mem_Read_IT(&hi2c2, 0b1110110 << 1, 0xD0, I2C_MEMADD_SIZE_8BIT, &data, 1);
+  Scd40Init();
 
-  //W5100 RX memory size register read
-  HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET);
-  HAL_SPI_TransmitReceive_DMA(&hspi1, txData, rxData, 4);
-
-  // SCD40 samples
-/*
-  if(0 == start_periodic_measurement(&hi2c2)){	// START measurement
-	  start_periodic_measurement_flag == 1;
-  }
-
-  if(start_periodic_measurement_flag == 1 && i2c2_state == I2C_ILDE){
-	  if(0 == check_data_ready(&hi2c2, &scd40_data_buffer[0])){ // First check if data ready to read
-		  i2c2_state = I2C_SCD40_DATA_READY_READ;				 // If data ready -> read data
-	  }
-  }
-
-  if(0 == stop_periodic_measurement(&hi2c2)){	// STOP measurement
-  	  start_periodic_measurement_flag == 0;
-  }
-*/
+  //dummy EEG-like data for testing
+  int handle = ProtoRegister("EEG ", NULL);
+  unsigned char a[15] = {0b11001010, 0b01010000, 0, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0x7F, 0xFF, 0xFF};
+  ProtoSend(handle, a, sizeof(a));
 
   /* USER CODE END 2 */
 
@@ -174,6 +138,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  Scd40Process();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -284,7 +249,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -375,6 +340,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(ADS_READY_GPIO_Port, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
