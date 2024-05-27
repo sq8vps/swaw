@@ -2,6 +2,7 @@
 #include "scd40.h"
 #include "i2c.h"
 #include "proto.h"
+#include "stm32f1xx.h"
 
 #define CRC8_POLYNOMIAL 0x31
 #define CRC8_INIT 0xFF
@@ -99,22 +100,22 @@ static uint8_t read_data(void)
 }
 
 
-static void parse()
+static void parse_data()
 {
 	// Scd40Buffer contains: co2_MSB, co2_LSB, co2_CRC, temp_MSB, temp_LSB, temp_CRC, hum_MSB, hum_LSB, hum_CRC
     if(Scd40Buffer[2] == crc_generate(&Scd40Buffer[0], 2))
     {
-        sensor->co2_level = (Scd40Buffer[0] << 8) | Scd40Buffer[1];
+        Scd40Data.co2_level = (Scd40Buffer[0] << 8) | Scd40Buffer[1];
     }
     if(Scd40Buffer[5] == crc_generate(&Scd40Buffer[3], 2))
     {
         int32_t t = (Scd40Buffer[3] << 8) | Scd40Buffer[4];
-        sensor->temperature = ((175 * t) / 65535) - 45;
+        Scd40Data.temperature = ((175 * t) / 65535) - 45;
     }
     if(Scd40Buffer[8] == crc_generate(&Scd40Buffer[6], 2))
     {
         int32_t t = (Scd40Buffer[6] << 8) | Scd40Buffer[7];
-        sensor->humidity = (100 * t) / 65535;
+        Scd40Data.humidity = (100 * t) / 65535;
     }
 }
 

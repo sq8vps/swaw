@@ -285,13 +285,13 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
     return USBD_BUSY;
   }
 
-  uint32_t to = 0;
-  while(hcdc->TxState != 0)
-  {
-	  to++;
-	  if(to > 90000) //wait for a while if USB busy
-		  return USBD_FAIL;
-  }
+//  uint32_t to = 0;
+//  while(hcdc->TxState != 0)
+//  {
+//	  to++;
+//	  if(to > 90000) //wait for a while if USB busy
+//		  return USBD_FAIL;
+//  }
   USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
   result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
   /* USER CODE END 7 */

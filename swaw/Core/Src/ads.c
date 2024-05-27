@@ -20,6 +20,8 @@ struct AdsState
 
 } static AdsState = {.readMode = false, .inProgress = false, .send = false, .index = 0};
 
+static uint8_t AdsDummyTxData[sizeof(struct AdsState)] = {0};
+
 extern SPI_HandleTypeDef hspi1;
 extern DMA_HandleTypeDef hdma_spi1_rx;
 
@@ -29,7 +31,7 @@ extern DMA_HandleTypeDef hdma_spi1_rx;
 #define START() HAL_GPIO_WritePin(ADS_START_GPIO_Port, ADS_START_Pin, GPIO_PIN_SET)
 #define STOP() HAL_GPIO_WritePin(ADS_START_GPIO_Port, ADS_START_Pin, GPIO_PIN_RESET)
 
-static void AdsSendCommand(enum AdsCommand command);
+void AdsSendCommand(enum AdsCommand command);
 static void AdsWriteRegister(enum AdsRegister reg, uint8_t val);
 static void AdsWriteRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size);
 static uint8_t AdsReadRegister(enum AdsRegister reg);
@@ -42,6 +44,7 @@ static void AdsRequestRxCallback(void *buffer, size_t size)
 
 }
 
+
 void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 {
 	CHIP_DESELECT();
@@ -50,21 +53,18 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 	AdsState.index ^= 1; //switch to the other buffer
 }
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+void AdsReadyCallback(uint16_t GPIO_Pin)
 {
-	if(ADS_READY_Pin == GPIO_Pin)
+	if(AdsState.readMode)
 	{
-		if(AdsState.readMode)
-		{
-			AdsState.inProgress = true;
-			CHIP_SELECT();
-			HAL_SPI_Receive_DMA(&hspi1, (uint8_t*)&(AdsData[AdsState.index]), sizeof(AdsData[0]));
-		}
-		else
-		{
-			STOP();
-			AdsState.inProgress = false;
-		}
+		AdsState.inProgress = true;
+		CHIP_SELECT();
+		HAL_SPI_TransmitReceive_DMA(&hspi1, AdsDummyTxData, (uint8_t*)&(AdsData[AdsState.index]), sizeof(AdsData[0]));
+	}
+	else
+	{
+		STOP();
+		AdsState.inProgress = false;
 	}
 }
 
@@ -105,7 +105,6 @@ void AdsSetChannelConfig(uint8_t channel, bool enable, enum AdsChannelMode mode,
 	else
 		d &= ~ADS_LOFF_SENSx_BIT(channel);
 	AdsWriteRegister(LOFF_SENSP, d);
-
 
 	AdsRestartConversion(previous);
 }
@@ -155,7 +154,7 @@ static bool AdsStopConversion(void)
 	return previous;
 }
 
-static void AdcRestartConversion(bool previous)
+static void AdsRestartConversion(bool previous)
 {
 	AdsState.readMode = previous;
 	if(previous)
@@ -165,10 +164,10 @@ static void AdcRestartConversion(bool previous)
 	}
 }
 
-static void AdsSendCommand(enum AdsCommand command)
+void AdsSendCommand(enum AdsCommand command)
 {
 	bool previous;
-	if(ADS_SDATAC != command)
+	if((ADS_SDATAC != command) && (ADS_RDATAC != command))
 		previous = AdsStopConversion();
 
 	uint8_t d = command;
@@ -176,7 +175,7 @@ static void AdsSendCommand(enum AdsCommand command)
 	HAL_SPI_Transmit(&hspi1, &d, 1, 20);
 	CHIP_DESELECT();
 
-	if(ADS_SDATAC != command)
+	if((ADS_SDATAC != command) && (ADS_RDATAC != command))
 		AdsRestartConversion(previous);
 }
 
@@ -192,16 +191,16 @@ static void AdsWriteRegister(enum AdsRegister reg, uint8_t val)
 	CHIP_DESELECT();
 }
 
-static void AdsWriteRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size)
-{
-	uint8_t header[2];
-	header[0] = ADS_WREG_BITS | (startReg & ADS_RREG_WREG_MASK);
-	header[1] = (size - 1) & ADS_RREG_WREG_SIZE_MASK;
-	CHIP_SELECT();
-	HAL_SPI_Transmit(&hspi1, header, 2, 20);
-	HAL_SPI_Transmit(&hspi1, data, size, size * 10 + 10);
-	CHIP_DESELECT();
-}
+//static void AdsWriteRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size)
+//{
+//	uint8_t header[2];
+//	header[0] = ADS_WREG_BITS | (startReg & ADS_RREG_WREG_MASK);
+//	header[1] = (size - 1) & ADS_RREG_WREG_SIZE_MASK;
+//	CHIP_SELECT();
+//	HAL_SPI_Transmit(&hspi1, header, 2, 20);
+//	HAL_SPI_Transmit(&hspi1, data, size, size * 10 + 10);
+//	CHIP_DESELECT();
+//}
 
 static uint8_t AdsReadRegister(enum AdsRegister reg)
 {
@@ -210,7 +209,7 @@ static uint8_t AdsReadRegister(enum AdsRegister reg)
 	uint8_t data[3], dataRx[3];
 	data[0] = ADS_RREG_BITS | (reg & ADS_RREG_WREG_MASK);
 	data[1] = 0; //count of bytes - 1
-	data[2] = 0;
+	data[2] = 0; //dummy
 
 	CHIP_SELECT();
 	HAL_SPI_TransmitReceive(&hspi1, data, dataRx, 3, 20);
@@ -221,20 +220,20 @@ static uint8_t AdsReadRegister(enum AdsRegister reg)
 	return dataRx[2];
 }
 
-static void AdsReadRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size)
-{
-	bool previous = AdsStopConversion();
-
-	uint8_t header[2];
-	header[0] = ADS_RREG_BITS | (startReg & ADS_RREG_WREG_MASK);
-	header[1] = (size - 1) & ADS_RREG_WREG_SIZE_MASK;
-	CHIP_SELECT();
-	HAL_SPI_Transmit(&hspi1, header, 2, 20);
-	HAL_SPI_Receive(&hspi1, data, size, size * 10 + 10);
-	CHIP_DESELECT();
-
-	AdsRestartConversion(previous);
-}
+//static void AdsReadRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size)
+//{
+//	bool previous = AdsStopConversion();
+//
+//	uint8_t header[2];
+//	header[0] = ADS_RREG_BITS | (startReg & ADS_RREG_WREG_MASK);
+//	header[1] = (size - 1) & ADS_RREG_WREG_SIZE_MASK;
+//	CHIP_SELECT();
+//	HAL_SPI_Transmit(&hspi1, header, 2, 20);
+//	HAL_SPI_Receive(&hspi1, data, size, size * 10 + 10);
+//	CHIP_DESELECT();
+//
+//	AdsRestartConversion(previous);
+//}
 
 void AdsProcess(void)
 {
@@ -243,20 +242,37 @@ void AdsProcess(void)
 		AdsState.send = false;
 		ProtoSend(handle, &(AdsData[AdsState.index ^ 1]), sizeof(AdsData[0]));
 	}
+
+	//HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, AdsState.readMode ? SET : RESET);
+	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, (GPIOB->IDR & (1 << 8)) ? RESET : SET);
 }
 
 void AdsInit(void)
 {
+
 	CHIP_DESELECT();
 	STOP();
 	//ADS reset
 	HAL_GPIO_WritePin(ADS_RESET_GPIO_Port, ADS_RESET_Pin, GPIO_PIN_RESET);
 	HAL_Delay(100);
 	HAL_GPIO_WritePin(ADS_RESET_GPIO_Port, ADS_RESET_Pin, GPIO_PIN_SET);
-	HAL_Delay(100);
+	HAL_Delay(300); //150 ms typical startup time
+
+//	AdsSendCommand(ADS_SDATAC);
+//
+//	AdsWriteRegister(CONFIG3, ADS_CONFIG3_RSVD | ADS_CONFIG3_PD_BIAS);
+//	AdsSetDataRate(ADS_250);
+//	AdsWriteRegister(CONFIG2, ADS_CONFIG2_RSVD);
+//	AdsWriteRegister(ADS_CHnSET(0), 1);
+//	AdsWriteRegister(ADS_CHnSET(1), 1);
+//	AdsWriteRegister(ADS_CHnSET(2), 1);
+//	AdsWriteRegister(ADS_CHnSET(3), 1);
+//
+//	START();
+//	AdsSendCommand(ADS_RDATAC);
+//	AdsState.readMode = true;
 
 	AdsSendCommand(ADS_SDATAC); //stop data read
-
 	//set output data rate to 1 ksps
 	AdsSetDataRate(ADS_1K);
 	//enable internal bias reference, bias buffer and bias lead off detection
@@ -267,10 +283,12 @@ void AdsInit(void)
 	AdsWriteRegister(MISC1, ADS_MISC1_RSVD | ADS_MISC1_SRB1_BIT);
 	//enable lead off comparator
 	AdsWriteRegister(CONFIG4, ADS_CONFIG4_RSVD | ADS_CONFIG4_PD_LOFF_COMP);
+	//enable internal test signal generation
+	AdsWriteRegister(CONFIG2, ADS_CONFIG2_RSVD | ADS_CONFIG2_INT_CAL);
 
 	//set initial channel config - normal mode, gain 8x, bias derivation and lead off detection
 	for(uint8_t i = 0; i < ADS_INPUT_COUNT; i++)
-		AdsSetChannelConfig(i, true, ADS_CHANNEL_NORMAL, ADS_GAIN_8, true, true);
+		AdsSetChannelConfig(i, true, ADS_CHANNEL_SHORTED, ADS_GAIN_24, true, true);
 
 	handle = ProtoRegister(ADS_PROTO_ID, AdsRequestRxCallback);
 

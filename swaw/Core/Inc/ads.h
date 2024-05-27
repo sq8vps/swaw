@@ -82,4 +82,7 @@ void AdsInit(void);
 
 void AdsProcess(void);
 
+void AdsReadyCallback(uint16_t GPIO_Pin);
+
+
 #endif /* INC_ADS_H_ */

@@ -25,7 +25,8 @@
 #include "stm32f1xx.h"
 #include "proto.h"
 #include "scd40.h"
-
+#include "ads.h"
+#include "MAX30102.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -60,7 +61,7 @@ DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
 
 /* USER CODE BEGIN PV */
-
+char UartBuffer[32];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -81,7 +82,7 @@ void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
 	if(hi2c->Instance == I2C2)
 	{
-		Scd40HandleInterrupt();
+		//Scd40HandleInterrupt();
 	}
 }
 
@@ -111,7 +112,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  USB_FORCE_REENUMERATION(); //only on BluePill!!!!
+  //USB_FORCE_REENUMERATION(); //only on BluePill!!!!
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -125,12 +126,9 @@ int main(void)
   //enable USB pullup for USB enumeration
   HAL_GPIO_WritePin(USB_PU_GPIO_Port, USB_PU_Pin, GPIO_PIN_SET);
 
-  Scd40Init();
-
-  //dummy EEG-like data for testing
-  int handle = ProtoRegister("EEG ", NULL);
-  unsigned char a[15] = {0b11001010, 0b01010000, 0, 0xFF, 0xFF, 0xFF, 0, 0, 0, 0, 0, 0, 0x7F, 0xFF, 0xFF};
-  ProtoSend(handle, a, sizeof(a));
+  //Scd40Init();
+  AdsInit();
+  //Max30102_Init(&hi2c2);
 
   /* USER CODE END 2 */
 
@@ -138,7 +136,14 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  Scd40Process();
+	  //Scd40Process();
+	  AdsProcess();
+//	  Max30102_Task();
+//		sprintf(UartBuffer, "%c[2J%c[H", 27, 27);
+//		CDC_Transmit_FS(UartBuffer, strlen(UartBuffer));
+//
+//		sprintf(UartBuffer, "HR: %d\n\rSpO2: %d\n\r", Max30102_GetHeartRate(), Max30102_GetSpO2Value());
+//		CDC_Transmit_FS(UartBuffer, strlen(UartBuffer));
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -247,9 +252,9 @@ static void MX_SPI1_Init(void)
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -275,10 +280,10 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
   /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 1, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 
 }
@@ -342,8 +347,11 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(ADS_READY_GPIO_Port, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 4, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
