@@ -41,16 +41,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define USB_FORCE_REENUMERATION() { \
-	/* Pull D+ to ground for a moment to force reenumeration */ \
-	RCC->APB2ENR |= RCC_APB2ENR_IOPAEN; \
-	GPIOA->CRH |= GPIO_CRH_MODE12_1; \
-	GPIOA->CRH &= ~GPIO_CRH_CNF12; \
-	GPIOA->BSRR = GPIO_BSRR_BR12; \
-	HAL_Delay(100); \
-	GPIOA->CRH &= ~GPIO_CRH_MODE12; \
-	GPIOA->CRH |= GPIO_CRH_CNF12_0; \
-} \
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -61,7 +52,6 @@ DMA_HandleTypeDef hdma_spi1_tx;
 DMA_HandleTypeDef hdma_spi1_rx;
 
 /* USER CODE BEGIN PV */
-char UartBuffer[32];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -76,15 +66,6 @@ static void MX_SPI1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-//callback for I2C memory read mode
-void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
-{
-	if(hi2c->Instance == I2C2)
-	{
-		//Scd40HandleInterrupt();
-	}
-}
 
 /* USER CODE END 0 */
 
@@ -112,7 +93,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  //USB_FORCE_REENUMERATION(); //only on BluePill!!!!
+
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -126,8 +107,8 @@ int main(void)
   //enable USB pullup for USB enumeration
   HAL_GPIO_WritePin(USB_PU_GPIO_Port, USB_PU_Pin, GPIO_PIN_SET);
 
-  //Scd40Init();
-  AdsInit();
+  Scd40Init(&hi2c2);
+  AdsInit(&hspi1, &hdma_spi1_rx);
   //Max30102_Init(&hi2c2);
 
   /* USER CODE END 2 */
@@ -136,7 +117,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  //Scd40Process();
+	  Scd40Process();
 	  AdsProcess();
 //	  Max30102_Task();
 //		sprintf(UartBuffer, "%c[2J%c[H", 27, 27);

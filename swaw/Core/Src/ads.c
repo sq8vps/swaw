@@ -5,11 +5,11 @@
 #include <stdbool.h>
 #include "adsdef.h"
 
-#define ADS_PROTO_ID "EEG "
-#define ADS_INPUT_COUNT 4
-
 static struct AdsData AdsData[2];
 static int handle = -1;
+static SPI_HandleTypeDef *AdsSpi;
+static DMA_HandleTypeDef *AdsDmaRx;
+
 
 struct AdsState
 {
@@ -22,20 +22,15 @@ struct AdsState
 
 static uint8_t AdsDummyTxData[sizeof(struct AdsState)] = {0};
 
-extern SPI_HandleTypeDef hspi1;
-extern DMA_HandleTypeDef hdma_spi1_rx;
-
 #define CHIP_SELECT() HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_RESET)
 #define CHIP_DESELECT() HAL_GPIO_WritePin(SPI1_CS_GPIO_Port, SPI1_CS_Pin, GPIO_PIN_SET)
 
 #define START() HAL_GPIO_WritePin(ADS_START_GPIO_Port, ADS_START_Pin, GPIO_PIN_SET)
 #define STOP() HAL_GPIO_WritePin(ADS_START_GPIO_Port, ADS_START_Pin, GPIO_PIN_RESET)
 
-void AdsSendCommand(enum AdsCommand command);
+static void AdsSendCommand(enum AdsCommand command);
 static void AdsWriteRegister(enum AdsRegister reg, uint8_t val);
-static void AdsWriteRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size);
 static uint8_t AdsReadRegister(enum AdsRegister reg);
-static void AdsReadRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size);
 static bool AdsStopConversion(void);
 static void AdsRestartConversion(bool previous);
 
@@ -59,88 +54,13 @@ void AdsReadyCallback(uint16_t GPIO_Pin)
 	{
 		AdsState.inProgress = true;
 		CHIP_SELECT();
-		HAL_SPI_TransmitReceive_DMA(&hspi1, AdsDummyTxData, (uint8_t*)&(AdsData[AdsState.index]), sizeof(AdsData[0]));
+		HAL_SPI_TransmitReceive_DMA(AdsSpi, AdsDummyTxData, (uint8_t*)&(AdsData[AdsState.index]), sizeof(AdsData[0]));
 	}
 	else
 	{
 		STOP();
 		AdsState.inProgress = false;
 	}
-}
-
-
-uint8_t AdsCheckInputLeadState(void)
-{
-	return ~(AdsReadRegister(LOFF_STATP) & ((1 << ADS_INPUT_COUNT) - 1));
-}
-
-bool AdsCheckBiasLeadState(void)
-{
-	return !(AdsReadRegister(CONFIG3) & ADS_CONFIG3_BIAS_STAT);
-}
-
-void AdsSetChannelConfig(uint8_t channel, bool enable, enum AdsChannelMode mode, enum AdsChannelGain gain, bool biasDerivation, bool leadOffDetection)
-{
-	if(channel >= ADS_INPUT_COUNT)
-		return;
-
-	mode &= 0x7;
-	gain &= 0x7;
-
-	bool previous = AdsStopConversion();
-
-	AdsWriteRegister(ADS_CHnSET(channel), ((!enable) << 7) | (gain << 4) | mode);
-
-	uint8_t d = 0;
-	d = AdsReadRegister(BIAS_SENSP);
-	if(biasDerivation)
-		d |= ADS_BIAS_SENSx_BIT(channel);
-	else
-		d &= ~ADS_BIAS_SENSx_BIT(channel);
-	AdsWriteRegister(BIAS_SENSP, d);
-
-	d = AdsReadRegister(LOFF_SENSP);
-	if(biasDerivation)
-		d |= ADS_LOFF_SENSx_BIT(channel);
-	else
-		d &= ~ADS_LOFF_SENSx_BIT(channel);
-	AdsWriteRegister(LOFF_SENSP, d);
-
-	AdsRestartConversion(previous);
-}
-
-
-/**
- * @brief Set lead-off detection configuration
- * @param level Comparator threshold
- * @param current Current magnitude
- * @param frequency Frequency
- */
-void AdsSetLeadOffConfig(enum AdsLeadOffThreshold level, enum AdsLeadOffCurrent current, enum AdsLeadOffFrequency freq)
-{
-	level &= 0x7;
-	current &= 0x3;
-	freq &= 0x3;
-
-	AdsWriteRegister(LOFF, ADS_LOFF_RSVD | (level << 5) | (current << 2) | (freq));
-}
-
-/**
- * @brief Set output data rate
- * @param freq Data rate
- */
-void AdsSetDataRate(enum AdsDataRate freq)
-{
-	freq &= 0x7;
-	AdsWriteRegister(CONFIG1, ADS_CONFIG1_RSVD | freq);
-}
-
-void AdsReadId(uint8_t *channels, uint8_t *deviceId, uint8_t *revisionId)
-{
-	uint8_t d = AdsReadRegister(ID);
-	*channels = d & 0x3;
-	*deviceId = (d >> 2) & 0x3;
-	*revisionId = (d >> 5) & 0x7;
 }
 
 static bool AdsStopConversion(void)
@@ -164,7 +84,7 @@ static void AdsRestartConversion(bool previous)
 	}
 }
 
-void AdsSendCommand(enum AdsCommand command)
+static void AdsSendCommand(enum AdsCommand command)
 {
 	bool previous;
 	if((ADS_SDATAC != command) && (ADS_RDATAC != command))
@@ -172,7 +92,7 @@ void AdsSendCommand(enum AdsCommand command)
 
 	uint8_t d = command;
 	CHIP_SELECT();
-	HAL_SPI_Transmit(&hspi1, &d, 1, 20);
+	HAL_SPI_Transmit(AdsSpi, &d, 1, 20);
 	CHIP_DESELECT();
 
 	if((ADS_SDATAC != command) && (ADS_RDATAC != command))
@@ -187,20 +107,9 @@ static void AdsWriteRegister(enum AdsRegister reg, uint8_t val)
 	data[2] = val;
 
 	CHIP_SELECT();
-	HAL_SPI_Transmit(&hspi1, data, 3, 20);
+	HAL_SPI_Transmit(AdsSpi, data, 3, 20);
 	CHIP_DESELECT();
 }
-
-//static void AdsWriteRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size)
-//{
-//	uint8_t header[2];
-//	header[0] = ADS_WREG_BITS | (startReg & ADS_RREG_WREG_MASK);
-//	header[1] = (size - 1) & ADS_RREG_WREG_SIZE_MASK;
-//	CHIP_SELECT();
-//	HAL_SPI_Transmit(&hspi1, header, 2, 20);
-//	HAL_SPI_Transmit(&hspi1, data, size, size * 10 + 10);
-//	CHIP_DESELECT();
-//}
 
 static uint8_t AdsReadRegister(enum AdsRegister reg)
 {
@@ -212,7 +121,7 @@ static uint8_t AdsReadRegister(enum AdsRegister reg)
 	data[2] = 0; //dummy
 
 	CHIP_SELECT();
-	HAL_SPI_TransmitReceive(&hspi1, data, dataRx, 3, 20);
+	HAL_SPI_TransmitReceive(AdsSpi, data, dataRx, 3, 20);
 	CHIP_DESELECT();
 
 	AdsRestartConversion(previous);
@@ -220,20 +129,87 @@ static uint8_t AdsReadRegister(enum AdsRegister reg)
 	return dataRx[2];
 }
 
-//static void AdsReadRegisterEx(enum AdsRegister startReg, uint8_t *data, uint8_t size)
-//{
-//	bool previous = AdsStopConversion();
-//
-//	uint8_t header[2];
-//	header[0] = ADS_RREG_BITS | (startReg & ADS_RREG_WREG_MASK);
-//	header[1] = (size - 1) & ADS_RREG_WREG_SIZE_MASK;
-//	CHIP_SELECT();
-//	HAL_SPI_Transmit(&hspi1, header, 2, 20);
-//	HAL_SPI_Receive(&hspi1, data, size, size * 10 + 10);
-//	CHIP_DESELECT();
-//
-//	AdsRestartConversion(previous);
-//}
+bool AdsCheckBiasLeadState(void)
+{
+	return !(AdsReadRegister(CONFIG3) & ADS_CONFIG3_BIAS_STAT);
+}
+
+void AdsSetChannelConfig(uint8_t channel, bool enable, enum AdsChannelMode mode, enum AdsChannelGain gain, bool biasDerivation, bool leadOffDetection)
+{
+	if(channel >= ADS_CHANNEL_COUNT)
+		return;
+
+	mode &= 0x7;
+	gain &= 0x7;
+
+	bool previous = AdsStopConversion();
+
+	AdsWriteRegister(ADS_CHnSET(channel), ((!enable) << 7) | (gain << 4) | mode);
+
+	uint8_t d = 0;
+	d = AdsReadRegister(BIAS_SENSP);
+	if(biasDerivation)
+		d |= ADS_BIAS_SENSx_BIT(channel);
+	else
+		d &= ~ADS_BIAS_SENSx_BIT(channel);
+	AdsWriteRegister(BIAS_SENSP, d);
+
+	d = AdsReadRegister(LOFF_SENSP);
+	if(leadOffDetection)
+		d |= ADS_LOFF_SENSx_BIT(channel);
+	else
+		d &= ~ADS_LOFF_SENSx_BIT(channel);
+	AdsWriteRegister(LOFF_SENSP, d);
+
+	AdsRestartConversion(previous);
+}
+
+
+void AdsSetLeadOffConfig(enum AdsLeadOffThreshold level, enum AdsLeadOffCurrent current, enum AdsLeadOffFrequency freq)
+{
+	level &= 0x7;
+	current &= 0x3;
+	freq &= 0x3;
+
+	AdsWriteRegister(LOFF, ADS_LOFF_RSVD | (level << 5) | (current << 2) | (freq));
+}
+
+void AdsSetBiasGain(enum AdsBiasGain gain)
+{
+	uint8_t d = 0;
+	switch(gain)
+	{
+		//gain=18 requires all 4 bits to be set, gain=14 requires 3 bits, etc.
+		case ADS_BIAS_GAIN_18:
+			d |= ADS_BIAS_SENSx_BIT(3);
+		case ADS_BIAS_GAIN_14:
+			d |= ADS_BIAS_SENSx_BIT(2);
+		case ADS_BIAS_GAIN_9:
+			d |= ADS_BIAS_SENSx_BIT(1);
+		case ADS_BIAS_GAIN_5:
+			d |= ADS_BIAS_SENSx_BIT(0);
+			break;
+		case ADS_BIAS_GAIN_0:
+		default:
+			break;
+
+	}
+	AdsWriteRegister(BIAS_SENSN, d);
+}
+
+void AdsSetDataRate(enum AdsDataRate freq)
+{
+	freq &= 0x7;
+	AdsWriteRegister(CONFIG1, ADS_CONFIG1_RSVD | freq);
+}
+
+void AdsReadId(uint8_t *channels, uint8_t *deviceId, uint8_t *revisionId)
+{
+	uint8_t d = AdsReadRegister(ID);
+	*channels = d & 0x3;
+	*deviceId = (d >> 2) & 0x3;
+	*revisionId = (d >> 5) & 0x7;
+}
 
 void AdsProcess(void)
 {
@@ -247,9 +223,10 @@ void AdsProcess(void)
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, (GPIOB->IDR & (1 << 8)) ? RESET : SET);
 }
 
-void AdsInit(void)
+void AdsInit(SPI_HandleTypeDef *hspi, DMA_HandleTypeDef *hDmaRx)
 {
-
+	AdsSpi = hspi;
+	AdsDmaRx = hDmaRx;
 	CHIP_DESELECT();
 	STOP();
 	//ADS reset
@@ -258,37 +235,25 @@ void AdsInit(void)
 	HAL_GPIO_WritePin(ADS_RESET_GPIO_Port, ADS_RESET_Pin, GPIO_PIN_SET);
 	HAL_Delay(300); //150 ms typical startup time
 
-//	AdsSendCommand(ADS_SDATAC);
-//
-//	AdsWriteRegister(CONFIG3, ADS_CONFIG3_RSVD | ADS_CONFIG3_PD_BIAS);
-//	AdsSetDataRate(ADS_250);
-//	AdsWriteRegister(CONFIG2, ADS_CONFIG2_RSVD);
-//	AdsWriteRegister(ADS_CHnSET(0), 1);
-//	AdsWriteRegister(ADS_CHnSET(1), 1);
-//	AdsWriteRegister(ADS_CHnSET(2), 1);
-//	AdsWriteRegister(ADS_CHnSET(3), 1);
-//
-//	START();
-//	AdsSendCommand(ADS_RDATAC);
-//	AdsState.readMode = true;
-
 	AdsSendCommand(ADS_SDATAC); //stop data read
 	//set output data rate to 1 ksps
 	AdsSetDataRate(ADS_1K);
-	//enable internal bias reference, bias buffer and bias lead off detection
-	AdsWriteRegister(CONFIG3, ADS_CONFIG3_RSVD | ADS_CONFIG3_BIASREF_INT | ADS_CONFIG3_PD_BIAS | ADS_CONFIG3_BIAS_LOFF_SENS);
-	//set initial lead off config
+	//enable internal bias reference, bias buffer, bias lead off detection and internal reference buffer
+	AdsWriteRegister(CONFIG3, ADS_CONFIG3_RSVD | ADS_CONFIG3_BIASREF_INT | ADS_CONFIG3_PD_BIAS | ADS_CONFIG3_BIAS_LOFF_SENS | ADS_CONFIG3_PD_REFBUF);
+	//set initial lead off current sources config to 6 nA DC and the comparator threshold to 95%/5%
 	AdsSetLeadOffConfig(ADS_LO_P95_N5, ADS_LO_6NA, ADS_LO_DC);
-	//enable SRB1, which is the reference electrode input
-	AdsWriteRegister(MISC1, ADS_MISC1_RSVD | ADS_MISC1_SRB1_BIT);
 	//enable lead off comparator
 	AdsWriteRegister(CONFIG4, ADS_CONFIG4_RSVD | ADS_CONFIG4_PD_LOFF_COMP);
+	//enable SRB1, which is the reference electrode input
+	AdsWriteRegister(MISC1, ADS_MISC1_RSVD | ADS_MISC1_SRB1_BIT);
 	//enable internal test signal generation
 	AdsWriteRegister(CONFIG2, ADS_CONFIG2_RSVD | ADS_CONFIG2_INT_CAL);
+	//set reference derived bias gain to 5 (one amplifier)
+	AdsSetBiasGain(ADS_BIAS_GAIN_5);
 
-	//set initial channel config - normal mode, gain 8x, bias derivation and lead off detection
-	for(uint8_t i = 0; i < ADS_INPUT_COUNT; i++)
-		AdsSetChannelConfig(i, true, ADS_CHANNEL_SHORTED, ADS_GAIN_24, true, true);
+	//set initial channel config - normal mode, 1x gain, no bias derivation, enable lead off detection (current source)
+	for(uint8_t i = 0; i < ADS_CHANNEL_COUNT; i++)
+		AdsSetChannelConfig(i, true, ADS_CHANNEL_NORMAL, ADS_GAIN_1, false, true);
 
 	handle = ProtoRegister(ADS_PROTO_ID, AdsRequestRxCallback);
 

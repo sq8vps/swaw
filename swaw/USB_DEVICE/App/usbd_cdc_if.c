@@ -281,17 +281,18 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
   uint8_t result = USBD_OK;
   /* USER CODE BEGIN 7 */
   USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
-  if (hcdc->TxState > 1){
-    return USBD_BUSY;
+
+  //the TxState variable seems to be set to 0 when idle, 1 when sending data
+  //and some huge values when USB is not connected
+  //then if USB is not connected, return immediately
+  //if something is currently being transmitted, then wait
+  if(hcdc->TxState > 1)
+  {
+	  return USBD_BUSY;
   }
 
-//  uint32_t to = 0;
-//  while(hcdc->TxState != 0)
-//  {
-//	  to++;
-//	  if(to > 90000) //wait for a while if USB busy
-//		  return USBD_FAIL;
-//  }
+  while(hcdc->TxState == 1)
+	  ;
   USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
   result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
   /* USER CODE END 7 */
