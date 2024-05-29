@@ -26,17 +26,17 @@ static I2C_HandleTypeDef *ScdI2c = NULL;
 
 static struct Scd40Data Scd40Data;
 
-static bool Scd40DataReady = false;
+volatile static bool Scd40DataReady = false;
 
 static int handle = -1;
 
-static uint8_t Scd40Buffer[9];
+volatile static uint8_t Scd40Buffer[9];
 enum Scd40State
 {
 	SCD40_IDLE = 0,
 	SCD40_CHECK_READY,
 	SCD40_READ,
-} static Scd40State = SCD40_IDLE;
+} volatile static Scd40State = SCD40_IDLE;
 
 static uint32_t Scd40Timer = 0;
 

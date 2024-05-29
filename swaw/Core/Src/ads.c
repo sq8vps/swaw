@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include "adsdef.h"
 
-static struct AdsData AdsData[2];
+volatile static struct AdsData AdsData[2];
 static int handle = -1;
 static SPI_HandleTypeDef *AdsSpi;
 static DMA_HandleTypeDef *AdsDmaRx;
@@ -18,7 +18,7 @@ struct AdsState
 	bool send;
 	uint8_t index;
 
-} static AdsState = {.readMode = false, .inProgress = false, .send = false, .index = 0};
+} volatile static AdsState = {.readMode = false, .inProgress = false, .send = false, .index = 0};
 
 static uint8_t AdsDummyTxData[sizeof(struct AdsState)] = {0};
 
@@ -34,9 +34,66 @@ static uint8_t AdsReadRegister(enum AdsRegister reg);
 static bool AdsStopConversion(void);
 static void AdsRestartConversion(bool previous);
 
+enum AdsConfigRequestCode
+{
+	ADS_CONFIG_REQUEST_CHANNEL = 0x01,
+	ADS_CONFIG_REQUEST_BIAS_GAIN = 0x02,
+	ADS_CONFIG_REQUEST_LEAD_OFF = 0x03,
+};
+
+struct AdsChannelConfigRequest
+{
+	uint8_t code;
+	uint8_t channel;
+	uint8_t enable;
+	uint8_t mode;
+	uint8_t gain;
+	uint8_t biasDerivation;
+	uint8_t leadOffDetection;
+} __attribute__ ((packed));
+
+struct AdsBiasGainRequest
+{
+	uint8_t code;
+	uint8_t gain;
+} __attribute__ ((packed));
+
+struct AdsLeadOffRequest
+{
+	uint8_t code;
+	uint8_t level;
+	uint8_t current;
+	uint8_t mode;
+} __attribute__ ((packed));
+
 static void AdsRequestRxCallback(void *buffer, size_t size)
 {
-
+	uint8_t *d = buffer;
+	enum AdsConfigRequestCode code = d[0];
+	switch(code)
+	{
+		case ADS_CONFIG_REQUEST_CHANNEL:
+			if(size >= sizeof(struct AdsChannelConfigRequest))
+			{
+				struct AdsChannelConfigRequest *s = buffer;
+				AdsSetChannelConfig(s->channel, !!(s->enable), s->mode, s->gain, !!(s->biasDerivation), !!(s->leadOffDetection));
+			}
+			break;
+		case ADS_CONFIG_REQUEST_BIAS_GAIN:
+			if(size >= sizeof(struct AdsBiasGainRequest))
+			{
+				struct AdsBiasGainRequest *s = buffer;
+				AdsSetBiasGain(s->gain);
+			}
+			break;
+		case ADS_CONFIG_REQUEST_LEAD_OFF:
+			if(size >= sizeof(struct AdsLeadOffRequest))
+			{
+				struct AdsLeadOffRequest *s = buffer;
+				AdsSetLeadOffConfig(s->level, s->current, s->mode);
+			}
+			break;
+	}
 }
 
 
@@ -66,6 +123,7 @@ void AdsReadyCallback(uint16_t GPIO_Pin)
 static bool AdsStopConversion(void)
 {
 	bool previous = AdsState.readMode;
+	AdsState.readMode = false;
 	while(true == AdsState.inProgress)
 		;
 
@@ -216,11 +274,8 @@ void AdsProcess(void)
 	if(AdsState.send)
 	{
 		AdsState.send = false;
-		ProtoSend(handle, &(AdsData[AdsState.index ^ 1]), sizeof(AdsData[0]));
+		ProtoSend(handle, (void*)&(AdsData[AdsState.index ^ 1]), sizeof(AdsData[0]));
 	}
-
-	//HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, AdsState.readMode ? SET : RESET);
-	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, (GPIOB->IDR & (1 << 8)) ? RESET : SET);
 }
 
 void AdsInit(SPI_HandleTypeDef *hspi, DMA_HandleTypeDef *hDmaRx)

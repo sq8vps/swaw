@@ -117,6 +117,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  ProtoProcess();
 	  Scd40Process();
 	  AdsProcess();
 //	  Max30102_Task();

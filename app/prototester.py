@@ -15,7 +15,6 @@ y2 = [0] * SAMPLE_COUNT
 y3 = [0] * SAMPLE_COUNT
 y4 = [0] * SAMPLE_COUNT
 c = 0
-fir = scipy.signal.firwin(63, 100, fs=1000)
 
 def ParseEeg(payload, size):
     if size < (3 + 3 * EEG_CHANNELS):
@@ -50,10 +49,6 @@ def ParseEeg(payload, size):
             ymax = ymax * 0.8
 
         plt.ylim(ymin, ymax)
-        # plt.plot(x, scipy.signal.convolve(np.array(y1), fir)[50:SAMPLE_COUNT-50], label='ch1')
-        # plt.plot(x, scipy.signal.convolve(np.array(y2), fir)[50:SAMPLE_COUNT-50], label='ch2')
-        # plt.plot(x, scipy.signal.convolve(np.array(y3), fir)[50:SAMPLE_COUNT-50], label='ch3')
-        # plt.plot(x, scipy.signal.convolve(np.array(y4), fir)[50:SAMPLE_COUNT-50], label='ch4')
         plt.plot(np.array(y1), label='ch1')
         plt.plot(np.array(y2), label='ch2')
         plt.plot(np.array(y3), label='ch3')
@@ -75,10 +70,26 @@ def ParseCo2(payload, size):
     data = struct.unpack('<HhH', payload)
     print('CO2 level: ' + str(data[0]) + ' ppm, temperature: ' + str(data[1]) + ' oC, humidity: ' + str(data[2]) + '%')
 
+def SetExampleChannelConfig(ser):
+    # example of setting the EEG channel
+    # first there is the ID = "EEG \0" (5 bytes including null terminator)
+    # then there is the payload length as uint32 = 7
+    # then command code = 1 = ADS channel configuration
+    # channel number = 2
+    # enable = 1
+    # mode = 1 = shorted inputs
+    # gain = 3 = 6x
+    # bias derivation = 0 = disabled
+    # lead off detection = 1 = enabled
+    # refer to ads.c for command descriptions and to ads.h for value descriptions
+    ser.write(struct.pack('<5sI7B', bytes('EEG \0', encoding='ascii'), 7, 1, 2, 1, 1, 3, 0, 1))
+
 ser = serial.Serial(SERIAL, timeout=1)
 ser.reset_input_buffer()
+SetExampleChannelConfig(ser)
 while True:
     try:
+        
         rawHeader = ser.read(9) #read at least 9 bytes: 5-byte ID and 4-byte payload size
         if len(rawHeader) == 0:
             continue

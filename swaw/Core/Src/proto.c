@@ -23,6 +23,43 @@ struct ProtoPacket
 
 static uint8_t protoBuffer[PROTO_MAX_PAYLOAD_SIZE + sizeof(struct ProtoPacket)];
 
+
+struct ProtoRxState
+{
+	struct ProtoPacket *packet;
+	uint32_t size;
+	bool available;
+} volatile static ProtoRxState = {.available = false};
+
+void ProtoProcess(void)
+{
+	if(ProtoRxState.available)
+	{
+		if(ProtoRxState.size < sizeof(ProtoId))
+			return;
+
+		if(ProtoRxState.packet->size > (ProtoRxState.size - sizeof(struct ProtoPacket)))
+			return;
+
+		for(int i = 0; i < usedEntries; i++)
+		{
+			if(0 == memcmp(ProtoRxState.packet->id, ProtoTable[i].id, sizeof(ProtoRxState.packet->id)))
+			{
+				if(NULL != ProtoTable[i].cb)
+					ProtoTable[i].cb(ProtoRxState.packet->payload, ProtoRxState.packet->size);
+			}
+		}
+		ProtoRxState.available = false;
+	}
+}
+
+void ProtoReceive(void *data, uint32_t size)
+{
+	ProtoRxState.packet = data;
+	ProtoRxState.size = size;
+	ProtoRxState.available = true;
+}
+
 int ProtoRegister(ProtoId id, ProtoCallback cb)
 {
 	if(usedEntries >= PROTO_ENTRY_COUNT)
