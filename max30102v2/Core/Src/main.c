@@ -297,13 +297,13 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-	if (GPIO_Pin == INT_Pin)
-	{
-		Max30102_InterruptCallback();
-	}
-}
+//void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+//{
+//	if (GPIO_Pin == INT_Pin)
+//	{
+//		Max30102_InterruptCallback();
+//	}
+//}
 /* USER CODE END 4 */
 
 /**

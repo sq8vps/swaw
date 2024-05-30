@@ -29,17 +29,17 @@ typedef enum
 	MAX30102_STATE StateMachine;
 
 
-void Max30102_Write_Reg(uint8_t uch_addr, uint8_t uch_data){
+static void Max30102_Write_Reg(uint8_t uch_addr, uint8_t uch_data){
 
 	HAL_I2C_Mem_Write(i2c_max30102, MAX30102_ADDRESS, uch_addr, 1, &uch_data, 1, I2C_TIMEOUT);
 }
 
-void Max30102_Read_Reg(uint8_t uch_addr, uint8_t *puch_data){
+static void Max30102_Read_Reg(uint8_t uch_addr, uint8_t *puch_data){
 
 	HAL_I2C_Mem_Read(i2c_max30102, MAX30102_ADDRESS, uch_addr, 1, puch_data, 1, I2C_TIMEOUT);
 }
 
-void Max30102_WriteRegisterBit(uint8_t Register, uint8_t Bit, uint8_t Value){
+static void Max30102_WriteRegisterBit(uint8_t Register, uint8_t Bit, uint8_t Value){
 
 	uint8_t tmp;
     Max30102_Read_Reg(Register, &tmp);
@@ -49,22 +49,22 @@ void Max30102_WriteRegisterBit(uint8_t Register, uint8_t Bit, uint8_t Value){
 	Max30102_Write_Reg(Register, tmp);
 }
 
-void Max30102_FifoWritePointer(uint8_t Address){
+static void Max30102_FifoWritePointer(uint8_t Address){
 
 	Max30102_Write_Reg(FIFO_WRITE_POINTER,(Address & 0x1F));  //FIFO_WR_PTR[4:0]
 }
 
-void Max30102_FifoOverflowCounter(uint8_t Address){
+static void Max30102_FifoOverflowCounter(uint8_t Address){
 
 	Max30102_Write_Reg(OVERFLOW_COUNTER,(Address & 0x1F));  //OVF_COUNTER[4:0]
 }
 
-void Max30102_FifoReadPointer(uint8_t Address){
+static void Max30102_FifoReadPointer(uint8_t Address){
 
 	Max30102_Write_Reg(FIFO_READ_POINTER,(Address & 0x1F));  //FIFO_RD_PTR[4:0]
 }
 
-void Max30102_FifoSampleAveraging(uint8_t Value) {
+static void Max30102_FifoSampleAveraging(uint8_t Value) {
 
 	uint8_t tmp;
 	Max30102_Read_Reg(FIFO_CONFIGURATION, &tmp);
@@ -74,12 +74,12 @@ void Max30102_FifoSampleAveraging(uint8_t Value) {
 	Max30102_Write_Reg(FIFO_CONFIGURATION, tmp);
 }
 
-void Max30102_FifoRolloverEnable(uint8_t Enable){
+static void Max30102_FifoRolloverEnable(uint8_t Enable){
 
 	Max30102_WriteRegisterBit(FIFO_CONFIGURATION, FIFO_CONF_FIFO_ROLLOVER_EN_BIT, (Enable & 0x01));
 }
 
-void  Max30102_FifoAlmostFullValue(uint8_t Value){
+static void  Max30102_FifoAlmostFullValue(uint8_t Value){
 
 	if(Value < 17) Value = 17;
 	if(Value > 32) Value = 32;
@@ -92,7 +92,7 @@ void  Max30102_FifoAlmostFullValue(uint8_t Value){
 	Max30102_Write_Reg(FIFO_CONFIGURATION, tmp);
 }
 
-void Max30102_SetMode(uint8_t Mode){
+static void Max30102_SetMode(uint8_t Mode){
 
 	uint8_t tmp;
 	Max30102_Read_Reg(MODE_CONFIGURATION, &tmp);
@@ -102,7 +102,7 @@ void Max30102_SetMode(uint8_t Mode){
 	Max30102_Write_Reg(MODE_CONFIGURATION, tmp);
 }
 
-void Max30102_SpO2AdcRange(uint8_t Value){
+static void Max30102_SpO2AdcRange(uint8_t Value){
 
 	uint8_t tmp;
 	Max30102_Read_Reg(SPO2_CONFIGURATION, &tmp);
@@ -112,7 +112,7 @@ void Max30102_SpO2AdcRange(uint8_t Value){
     Max30102_Write_Reg(SPO2_CONFIGURATION, tmp);
 }
 
-void Max30102_SpO2SampleRate(uint8_t Value){
+static void Max30102_SpO2SampleRate(uint8_t Value){
 
 	uint8_t tmp;
 	Max30102_Read_Reg(SPO2_CONFIGURATION, &tmp);
@@ -122,7 +122,7 @@ void Max30102_SpO2SampleRate(uint8_t Value){
 	Max30102_Write_Reg(SPO2_CONFIGURATION, tmp);
 }
 
-void Max30102_SpO2LedPulseWidth(uint8_t Value){
+static void Max30102_SpO2LedPulseWidth(uint8_t Value){
 
 	uint8_t tmp;
 	Max30102_Read_Reg(SPO2_CONFIGURATION, &tmp);
@@ -133,15 +133,43 @@ void Max30102_SpO2LedPulseWidth(uint8_t Value){
 		
 }
 
-void Max30102_SetIntAlmostFullEnabled(uint8_t Enable){
+static void Max30102_SetIntAlmostFullEnabled(uint8_t Enable){
 
 	return Max30102_WriteRegisterBit(INTERRUPT_ENABLE_1, INT_A_FULL_BIT, Enable);
 }
 
-void Max30102_SetIntFifoDataReadyEnabled(uint8_t Enable){
+static void Max30102_SetIntFifoDataReadyEnabled(uint8_t Enable){
 
 	return Max30102_WriteRegisterBit(INTERRUPT_ENABLE_1, INT_PPG_RDY_BIT, Enable);
 }
+
+
+/* LEDs Pulse Amplitute Configuration	LED Current = Value * 0.2 mA */	
+static void Max30102_Led1PulseAmplitude(uint8_t Value)
+{
+	Max30102_Write_Reg(LED_1_PA, Value);
+
+}
+
+static void Max30102_Led2PulseAmplitude(uint8_t Value)
+{
+	Max30102_Write_Reg(LED_2_PA, Value);
+}
+
+
+/* Usage Functions */
+
+int32_t Max30102_GetHeartRate(void)
+{
+	return HeartRate;
+}
+
+
+int32_t Max30102_GetSpO2Value(void)
+{
+	return Sp02Value;
+}
+
 
 MAX30102_STATUS Max30102_ReadFifo(volatile uint32_t *pun_red_led, volatile uint32_t *pun_ir_led)
 {
@@ -177,35 +205,20 @@ MAX30102_STATUS Max30102_ReadFifo(volatile uint32_t *pun_red_led, volatile uint3
 	return MAX30102_OK;
 }
 
-// #ifdef MAX30102_USE_INTERNAL_TEMPERATURE
-// MAX30102_STATUS Max30102_SetIntInternalTemperatureReadyEnabled(uint8_t Enable)
-// {
 
-// 	return Max30102_WriteRegisterBit(INTERRUPT_ENABLE_2, INT_DIE_TEMP_RDY_BIT, Enable);
-// }
-// #endif
-
-MAX30102_STATUS Max30102_ReadInterruptStatus(uint8_t *Status)
-{
+static void  Max30102_ReadInterruptStatus(uint8_t *Status){
+	
 	uint8_t tmp;
 	*Status = 0;
-
 	Max30102_Read_Reg(INTERRUPT_STATUS_1, &tmp);
-	
 	*Status |= tmp & 0xE1; // 3 highest bits
-// #ifdef MAX30102_USE_INTERNAL_TEMPERATURE
-// 	if(MAX30102_OK != Max30102_ReadReg(INTERRUPT_STATUS_2, &tmp))
-// 		return MAX30102_ERROR;
-// 	*Status |= tmp & 0x02;
-// #endif
-	return MAX30102_OK;
 }
 
 
 void Max30102_InterruptCallback(void)
 {
 	uint8_t Status;
-	while(MAX30102_OK != Max30102_ReadInterruptStatus(&Status));
+	Max30102_ReadInterruptStatus(&Status);
 
 	// Almost Full FIFO Interrupt handle
 	if(Status & (1<<INT_A_FULL_BIT))
@@ -252,46 +265,13 @@ void Max30102_InterruptCallback(void)
 	if(Status & (1<<INT_PWR_RDY_BIT))
 	{
 	}
-// #ifdef MAX30102_USE_INTERNAL_TEMPERATURE
-// 	// Internal Temperature Ready Interrupt handle
-// 	if(Status & (1<<INT_DIE_TEMP_RDY_BIT))
-// 	{
-
-// 	}
-// #endif
-}
-
-
-/* LEDs Pulse Amplitute Configuration	LED Current = Value * 0.2 mA */	
-
-void Max30102_Led1PulseAmplitude(uint8_t Value){
-
-	Max30102_Write_Reg(LED_1_PA, Value);
-	
-}
-
-void Max30102_Led2PulseAmplitude(uint8_t Value){
-
-	Max30102_Write_Reg(LED_2_PA, Value);
 
 }
 
-
-/* Usage Functions */
-
-int32_t Max30102_GetHeartRate(void)
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	return HeartRate;
+	Max30102_InterruptCallback();
 }
-
-
-int32_t Max30102_GetSpO2Value(void)
-{
-	return Sp02Value;
-}
-
-
-
 
 void Max30102_Task(void)
 {
@@ -304,6 +284,7 @@ void Max30102_Task(void)
 			{
 				CollectedSamples = 0;
 				BufferTail = BufferHead;
+
 				Max30102_Led1PulseAmplitude(MAX30102_RED_LED_CURRENT_HIGH);
 				Max30102_Led2PulseAmplitude(MAX30102_IR_LED_CURRENT_HIGH);
 				StateMachine = MAX30102_STATE_CALIBRATE;
@@ -354,11 +335,24 @@ void Max30102_Task(void)
 			{
 				Max30102_Led1PulseAmplitude(MAX30102_RED_LED_CURRENT_LOW);
 				Max30102_Led2PulseAmplitude(MAX30102_IR_LED_CURRENT_LOW);
+
 				StateMachine = MAX30102_STATE_BEGIN;
 			}
 			break;
 	}
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 void Max30102_Init(I2C_HandleTypeDef *i2c){
 	uint8_t uch_dummy;
@@ -385,7 +379,7 @@ void Max30102_Init(I2C_HandleTypeDef *i2c){
 
 	Max30102_SpO2LedPulseWidth(SPO2_PULSE_WIDTH_411);
 
-    Max30102_Led1PulseAmplitude(MAX30102_RED_LED_CURRENT_LOW);
+	Max30102_Led1PulseAmplitude(MAX30102_RED_LED_CURRENT_LOW);
 
 	Max30102_Led2PulseAmplitude(MAX30102_IR_LED_CURRENT_LOW);
 	

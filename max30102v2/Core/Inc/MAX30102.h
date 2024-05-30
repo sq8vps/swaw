@@ -138,44 +138,9 @@ typedef enum{
 } MAX30102_STATUS;
 
 
-
 /*--------------------FUNCTION DEFINITIONS--------------------*/
 
 void Max30102_Init(I2C_HandleTypeDef *i2c);
-MAX30102_STATUS Max30102_ReadFifo(volatile uint32_t *pun_red_led, volatile uint32_t *pun_ir_led);
-void Max30102_Write_Reg(uint8_t uch_addr, uint8_t uch_data);
-void Max30102_Read_Reg(uint8_t uch_addr, uint8_t *puch_data);
-
-/* INTERRUPTS */
-MAX30102_STATUS Max30102_ReadInterruptStatus(uint8_t *Status);
-void Max30102_SetIntAlmostFullEnabled(uint8_t Enable);
-void Max30102_SetIntFifoDataReadyEnabled(uint8_t Enable);
-#ifdef MAX30102_USE_INTERNAL_TEMPERATURE
-MAX30102_STATUS Max30102_SetIntInternalTemperatureReadyEnabled(uint8_t Enable);
-#endif
-void Max30102_InterruptCallback(void);
-
-/* FIFO CONFIGURATIONS */
-void Max30102_FifoWritePointer(uint8_t Address);
-void Max30102_FifoOverflowCounter(uint8_t Address);
-void Max30102_FifoReadPointer(uint8_t Address);
-void Max30102_FifoSampleAveraging(uint8_t Value);
-void Max30102_FifoRolloverEnable(uint8_t Enable);
-void Max30102_FifoAlmostFullValue(uint8_t Value); // 17-32 samples ready in FIFO
-
-/* MODE CONFIGURATION */
-void Max30102_SetMode(uint8_t Mode);
-
-/* SPO2 CONFIGURATION */
-void Max30102_SpO2AdcRange(uint8_t Value);
-void Max30102_SpO2SampleRate(uint8_t Value);
-void Max30102_SpO2LedPulseWidth(uint8_t Value);
-
-/* LEDs Pulse Amplitute Configuration */
-void Max30102_Led1PulseAmplitude(uint8_t Value);
-void Max30102_Led2PulseAmplitude(uint8_t Value);
-
-/* USAGE FUNCTIONS */
 void Max30102_Task(void);
 int32_t Max30102_GetHeartRate(void);
 int32_t Max30102_GetSpO2Value(void);
