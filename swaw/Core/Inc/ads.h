@@ -113,11 +113,11 @@ enum AdsChannelMode
  */
 enum AdsBiasGain
 {
-	ADS_BIAS_GAIN_0 = 0,
-	ADS_BIAS_GAIN_5,
-	ADS_BIAS_GAIN_9,
-	ADS_BIAS_GAIN_14,
-	ADS_BIAS_GAIN_18,
+	ADS_BIAS_GAIN_0 = 0x0,
+	ADS_BIAS_GAIN_5 = 0x1,
+	ADS_BIAS_GAIN_9 = 0x2,
+	ADS_BIAS_GAIN_14 = 0x3,
+	ADS_BIAS_GAIN_18 = 0x4,
 
 };
 
