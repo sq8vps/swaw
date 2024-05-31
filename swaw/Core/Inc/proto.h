@@ -28,4 +28,17 @@ int ProtoRegister(ProtoId id, ProtoCallback cb);
  */
 int ProtoSend(int handle, void *data, uint32_t size);
 
+/**
+ * @brief Store received data for processing
+ * @param *data Data buffer
+ * @param size Data size
+ */
+void ProtoReceive(void *data, uint32_t size);
+
+/**
+ * @brief Process protocol events
+ * @attention Run this function continuously in the main loop
+ */
+void ProtoProcess(void);
+
 #endif /* INC_PROTO_H_ */

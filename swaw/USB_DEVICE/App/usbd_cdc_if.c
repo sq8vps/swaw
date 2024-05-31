@@ -22,7 +22,7 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
-
+#include "proto.h"
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -261,6 +261,7 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
   /* USER CODE BEGIN 6 */
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+  ProtoReceive(Buf, *Len);
   return (USBD_OK);
   /* USER CODE END 6 */
 }
@@ -281,17 +282,18 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
   uint8_t result = USBD_OK;
   /* USER CODE BEGIN 7 */
   USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
-  if (hcdc->TxState > 1){
-    return USBD_BUSY;
+
+  //the TxState variable seems to be set to 0 when idle, 1 when sending data
+  //and some huge values when USB is not connected
+  //then if USB is not connected, return immediately
+  //if something is currently being transmitted, then wait
+  if(hcdc->TxState > 1)
+  {
+	  return USBD_BUSY;
   }
 
-  uint32_t to = 0;
-  while(hcdc->TxState != 0)
-  {
-	  to++;
-	  if(to > 90000) //wait for a while if USB busy
-		  return USBD_FAIL;
-  }
+  while(hcdc->TxState == 1)
+	  ;
   USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
   result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
   /* USER CODE END 7 */
