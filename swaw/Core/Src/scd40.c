@@ -4,7 +4,6 @@
 #include "proto.h"
 #include "stm32f1xx.h"
 
-#define SCD40_INTERVAL 10000 //ms
 //#define SCD40_DISABLE_AUTOCALIBRATION
 
 #define CRC8_POLYNOMIAL 0x31

@@ -26,7 +26,7 @@
 #include "proto.h"
 #include "scd40.h"
 #include "ads.h"
-#include "MAX30102.h"
+#include "max30102.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -104,12 +104,13 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   HAL_Delay(2000); //USB initialization apparently requires much time
+
   //enable USB pullup for USB enumeration
   HAL_GPIO_WritePin(USB_PU_GPIO_Port, USB_PU_Pin, GPIO_PIN_SET);
-  Max30102_Init(&hi2c2);
-//  Scd40Init(&hi2c2);
-//  AdsInit(&hspi1, &hdma_spi1_rx);
-  //Max30102_Init(&hi2c2);
+
+  Max30102Init(&hi2c2);
+  Scd40Init(&hi2c2);
+  AdsInit(&hspi1, &hdma_spi1_rx);
 
   /* USER CODE END 2 */
 
@@ -117,17 +118,10 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  static uint8_t UartBuffer[40];
-	  Max30102_Task();
-//	  ProtoProcess();
-//	  Scd40Process();
-//	  AdsProcess();
-//	  Max30102_Task();
-		sprintf(UartBuffer, "%c[2J%c[H", 27, 27);
-		CDC_Transmit_FS(UartBuffer, strlen(UartBuffer));
-
-		sprintf(UartBuffer, "HR: %d\n\rSpO2: %d\n\r", Max30102_GetHeartRate(), Max30102_GetSpO2Value());
-		CDC_Transmit_FS(UartBuffer, strlen(UartBuffer));
+	  Max30102Process();
+	  ProtoProcess();
+	  Scd40Process();
+	  AdsProcess();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

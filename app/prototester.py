@@ -3,6 +3,7 @@ import struct
 import sys
 from eeg import *
 from co2 import *
+from spo2 import *
 
 SERIAL = 'COM12'
 
@@ -24,6 +25,8 @@ while True:
             EegParse(payload, header[1])
         elif header[0] == CO2_ID:
             Co2Parse(payload, header[1])
+        elif header[0] == SPO2_ID:
+            Spo2Parse(payload, header[1])
         else:
            print('Unknown packet type: ' + str(header[0]))
     

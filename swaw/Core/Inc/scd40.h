@@ -6,6 +6,11 @@
 #include "stm32f1xx.h"
 
 /**
+ * @brief Data send interval in ms
+ */
+#define SCD40_INTERVAL 10000
+
+/**
  * @brief Protocol data ID
  */
 #define SCD40_PROTO_ID "CO2 "

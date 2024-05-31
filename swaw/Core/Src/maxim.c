@@ -64,9 +64,17 @@
 *	Website: https://msalamon.pl/palec-mi-pulsuje-pulsometr-max30102-pod-kontrola-stm32/
 *	GitHub:  https://github.com/lamik/MAX30102_STM32_HAL
 *
+********************************************************************************
+*	Modified by WZW Team on 31.05.2024 for a small cleanup
 */
-#include "main.h"
-#include <algorithm.h>
+#include "maxim.h"
+#include "max30102.h"
+
+#define FS MAX30102_SAMPLES_PER_SECOND
+#define BUFFER_SIZE  (MAX30102_BUFFER_LENGTH - MAX30102_SAMPLES_PER_SECOND)
+#define MA4_SIZE  4 // DO NOT CHANGE
+#define HAMMING_SIZE  5// DO NOT CHANGE
+#define min(x,y) ((x) < (y) ? (x) : (y))
 
 const uint16_t auw_hamm[31]={ 41,    276,    512,    276,     41 }; //Hamm=  long16(512* hamming(5)');
 //uch_spo2_table is computed as  -45.060*ratioAverage* ratioAverage + 30.354 *ratioAverage + 94.845 ;
@@ -80,11 +88,17 @@ const uint8_t uch_spo2_table[184]={ 95, 95, 95, 96, 96, 96, 97, 97, 97, 97, 97, 
                             49, 48, 47, 46, 45, 44, 43, 42, 41, 40, 39, 38, 37, 36, 35, 34, 33, 31, 30, 29,
                             28, 27, 26, 25, 23, 22, 21, 20, 19, 17, 16, 15, 14, 12, 11, 10, 9, 7, 6, 5,
                             3, 2, 1 } ;
-static int32_t an_dx[ BUFFER_SIZE-MA4_SIZE]; // delta
-static int32_t an_x[ BUFFER_SIZE]; //ir
-static int32_t an_y[ BUFFER_SIZE]; //red
+static int32_t an_dx[BUFFER_SIZE-MA4_SIZE]; // delta
+static int32_t an_x[BUFFER_SIZE]; //ir
+static int32_t an_y[BUFFER_SIZE]; //red
 
-void maxim_heart_rate_and_oxygen_saturation(volatile uint32_t *pun_ir_buffer, volatile uint32_t *pun_red_buffer, int32_t n_buffer_length, uint16_t un_offset, int32_t *pn_spo2, int8_t *pch_spo2_valid, int32_t *pn_heart_rate, int8_t  *pch_hr_valid)
+static void maxim_find_peaks( int32_t *pn_locs, int32_t *pn_npks,  int32_t *pn_x, int32_t n_size, int32_t n_min_height, int32_t n_min_distance, int32_t n_max_num );
+static void maxim_peaks_above_min_height( int32_t *pn_locs, int32_t *pn_npks,  int32_t *pn_x, int32_t n_size, int32_t n_min_height );
+static void maxim_remove_close_peaks( int32_t *pn_locs, int32_t *pn_npks,   int32_t  *pn_x, int32_t n_min_distance );
+static void maxim_sort_ascend( int32_t *pn_x, int32_t n_size );
+static void maxim_sort_indices_descend(  int32_t  *pn_x, int32_t *pn_indx, int32_t n_size);
+
+void MaximCalculate(volatile uint32_t *pun_ir_buffer, volatile uint32_t *pun_red_buffer, int32_t n_buffer_length, uint16_t un_offset, int32_t *pn_spo2, uint8_t *pch_spo2_valid, int32_t *pn_heart_rate, uint8_t  *pch_hr_valid)
 /**
 * \brief        Calculate the heart rate and SpO2 level
 * \par          Details
@@ -289,7 +303,7 @@ void maxim_heart_rate_and_oxygen_saturation(volatile uint32_t *pun_ir_buffer, vo
 }
 
 
-void maxim_find_peaks(int32_t *pn_locs, int32_t *pn_npks, int32_t *pn_x, int32_t n_size, int32_t n_min_height, int32_t n_min_distance, int32_t n_max_num)
+static void maxim_find_peaks(int32_t *pn_locs, int32_t *pn_npks, int32_t *pn_x, int32_t n_size, int32_t n_min_height, int32_t n_min_distance, int32_t n_max_num)
 /**
 * \brief        Find peaks
 * \par          Details
@@ -303,7 +317,7 @@ void maxim_find_peaks(int32_t *pn_locs, int32_t *pn_npks, int32_t *pn_x, int32_t
     *pn_npks = min( *pn_npks, n_max_num );
 }
 
-void maxim_peaks_above_min_height(int32_t *pn_locs, int32_t *pn_npks, int32_t  *pn_x, int32_t n_size, int32_t n_min_height)
+static void maxim_peaks_above_min_height(int32_t *pn_locs, int32_t *pn_npks, int32_t  *pn_x, int32_t n_size, int32_t n_min_height)
 /**
 * \brief        Find peaks above n_min_height
 * \par          Details
@@ -334,7 +348,7 @@ void maxim_peaks_above_min_height(int32_t *pn_locs, int32_t *pn_npks, int32_t  *
 }
 
 
-void maxim_remove_close_peaks(int32_t *pn_locs, int32_t *pn_npks, int32_t *pn_x, int32_t n_min_distance)
+static void maxim_remove_close_peaks(int32_t *pn_locs, int32_t *pn_npks, int32_t *pn_x, int32_t n_min_distance)
 /**
 * \brief        Remove peaks
 * \par          Details
@@ -363,7 +377,7 @@ void maxim_remove_close_peaks(int32_t *pn_locs, int32_t *pn_npks, int32_t *pn_x,
     maxim_sort_ascend( pn_locs, *pn_npks );
 }
 
-void maxim_sort_ascend(int32_t *pn_x,int32_t n_size) 
+static void maxim_sort_ascend(int32_t *pn_x,int32_t n_size)
 /**
 * \brief        Sort array
 * \par          Details
@@ -381,7 +395,7 @@ void maxim_sort_ascend(int32_t *pn_x,int32_t n_size)
     }
 }
 
-void maxim_sort_indices_descend(int32_t *pn_x, int32_t *pn_indx, int32_t n_size)
+static void maxim_sort_indices_descend(int32_t *pn_x, int32_t *pn_indx, int32_t n_size)
 /**
 * \brief        Sort indices
 * \par          Details
