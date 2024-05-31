@@ -1,5 +1,6 @@
 #include "i2c.h"
 #include "scd40.h"
+#include "MAX30102.h"
 
 static bool isFree = true;
 
@@ -21,6 +22,7 @@ void I2cUnlock(void)
 void HAL_I2C_MemRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
 	Scd40HandleInterrupt();
+	Max30102HandleI2cInterrupt();
 }
 
 void HAL_I2C_MemTxCpltCallback(I2C_HandleTypeDef *hi2c)

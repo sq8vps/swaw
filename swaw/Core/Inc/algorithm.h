@@ -70,7 +70,6 @@
 */
 #ifndef ALGORITHM_H_
 #define ALGORITHM_H_
-
 #include "MAX30102.h"
 
 #define true 1

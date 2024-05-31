@@ -66,7 +66,7 @@
 *
 */
 #include "main.h"
-#include "algorithm.h"
+#include <algorithm.h>
 
 const uint16_t auw_hamm[31]={ 41,    276,    512,    276,     41 }; //Hamm=  long16(512* hamming(5)');
 //uch_spo2_table is computed as  -45.060*ratioAverage* ratioAverage + 30.354 *ratioAverage + 94.845 ;
